@@ -133,6 +133,9 @@ func (r *PodReconciler) ReconcilePods(
 	if err != nil {
 		return err
 	}
+
+	logger.Infof("DEBUG: ReconcilePods: pods: %+v\n", pods)
+
 	numReplicas := int(*spec.Replicas)
 	var masterRole bool
 
@@ -145,7 +148,11 @@ func (r *PodReconciler) ReconcilePods(
 	//
 	// If replica is 1, return a slice with size 3. [[0],[1],[2]], pod with replica-index 1 and 2 are out of range and will be deleted.
 	podSlices := r.GetPodSlices(pods, numReplicas, logger)
+	logger.Info("DEBUG: podslices(len: %d) %+v\n", len(podSlices), podSlices)
+
 	for index, podSlice := range podSlices {
+		logger.Infof("DEBUG: len pod(%d): %d\n", index, len(podSlice))
+
 		if len(podSlice) > 1 {
 			logger.Warningf("We have too many pods for %s %d", rt, index)
 		} else if len(podSlice) == 0 {
@@ -158,8 +165,12 @@ func (r *PodReconciler) ReconcilePods(
 				return err
 			}
 		} else {
+
 			// Check the status of the current pod.
 			pod := podSlice[0]
+
+			logger.Infof("DEBUG: pod status %+v\n", pod.Status)
+			logger.Infof("DEBUG: pod name(%s), namespace(%s)\n", pod.Name, pod.Namespace)
 
 			// check if the index is in the valid range, if not, we should kill the pod
 			if index < 0 || index >= numReplicas {

@@ -271,6 +271,8 @@ func (jc *JobController) ReconcileJobs(
 				syncReplicas = false
 			}
 
+			log.Infof("DEBUG pg - %+v\n", pg)
+
 			// Delay pods creation until podgroup status is inqueue
 			if pg == nil || pg.Status.Phase == "" || pg.Status.Phase == v1beta1.PodGroupPending {
 				log.Warnf("PodGroup %v unschedulable", jobKey)
