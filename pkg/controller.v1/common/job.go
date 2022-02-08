@@ -88,14 +88,19 @@ func (jc *JobController) ReconcileJobs(
 		return err
 	}
 
+	log.Infof("pods - %+v\n", pods)
+
 	services, err := jc.Controller.GetServicesForJob(job)
 	if err != nil {
 		log.Warnf("GetServicesForJob error %v", err)
 		return err
 	}
 
+	log.Infoln("DEBUG: setting status")
+
 	oldStatus := jobStatus.DeepCopy()
 	if commonutil.IsSucceeded(jobStatus) || commonutil.IsFailed(jobStatus) {
+		log.Infof("succeeded: %t, failed: %t", commonutil.IsSucceeded(jobStatus), commonutil.IsFailed(jobStatus))
 		// If the Job is succeed or failed, delete all pods and services.
 		if err := jc.DeletePodsAndServices(runPolicy, job, pods); err != nil {
 			return err
@@ -133,6 +138,8 @@ func (jc *JobController) ReconcileJobs(
 		return nil
 	}
 
+	log.Infoln("DEBUG: check the retry")
+
 	// retrieve the previous number of retry
 	previousRetry := jc.WorkQueue.NumRequeues(jobKey)
 
@@ -150,6 +157,8 @@ func (jc *JobController) ReconcileJobs(
 	exceedsBackoffLimit := false
 	pastBackoffLimit := false
 
+	log.Infof("active: %d, failed: %d, totalReplicas: %d, prevReplicasFailedNum: %d\n", active, failed, totalReplicas, prevReplicasFailedNum)
+
 	if runPolicy.BackoffLimit != nil {
 		jobHasNewFailure := failed > prevReplicasFailedNum
 		// new failures happen when status does not reflect the failures and active
@@ -165,6 +174,8 @@ func (jc *JobController) ReconcileJobs(
 	}
 
 	if exceedsBackoffLimit || pastBackoffLimit {
+		log.Infoln("check if the number of pod restart exceeds backoff")
+
 		// check if the number of pod restart exceeds backoff (for restart OnFailure only)
 		// OR if the number of failed jobs increased since the last syncJob
 		jobExceedsLimit = true
@@ -172,9 +183,12 @@ func (jc *JobController) ReconcileJobs(
 	} else if jc.PastActiveDeadline(runPolicy, jobStatus) {
 		failureMessage = fmt.Sprintf("Job %s has failed because it was active longer than specified deadline", jobName)
 		jobExceedsLimit = true
+		log.Infof("DEBUG: %s", failureMessage)
 	}
 
 	if jobExceedsLimit {
+		log.Infoln("DEBUG: jobexceedslimit")
+
 		// Set job completion time before resource cleanup
 		if jobStatus.CompletionTime == nil {
 			now := metav1.Now()
@@ -210,6 +224,8 @@ func (jc *JobController) ReconcileJobs(
 
 		return jc.Controller.UpdateJobStatusInApiServer(job, &jobStatus)
 	} else {
+		log.Infoln("DEBUG: jobexceedslimit else")
+
 		// General cases which need to reconcile
 		if jc.Config.EnableGangScheduling {
 			minMember := totalReplicas
@@ -217,7 +233,9 @@ func (jc *JobController) ReconcileJobs(
 			priorityClass := ""
 			var minResources *v1.ResourceList
 
+			log.Infoln("DEBUG: checking schedulingpolicy")
 			if runPolicy.SchedulingPolicy != nil {
+				log.Infoln("DEBUG: checking schedulingpolicy not nil")
 				if runPolicy.SchedulingPolicy.MinAvailable != nil {
 					minMember = *runPolicy.SchedulingPolicy.MinAvailable
 				}
@@ -266,10 +284,15 @@ func (jc *JobController) ReconcileJobs(
 				// Update job status here to trigger a new reconciliation
 				return jc.Controller.UpdateJobStatusInApiServer(job, &jobStatus)
 			}
+			log.Infoln("exiting: %+v\n", pgSpec)
 		}
+
+		log.Info("DEBUG: replicas: %+v\n", replicas)
 
 		// Diff current active pods/services with replicas.
 		for rtype, spec := range replicas {
+			log.Info("DEBUG: replicas type: %+v, spec: %+v\n", rtype, spec)
+
 			err := jc.Controller.ReconcilePods(metaObject, &jobStatus, pods, rtype, spec, replicas)
 			if err != nil {
 				log.Warnf("ReconcilePods error %v", err)
